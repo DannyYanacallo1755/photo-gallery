@@ -4,6 +4,7 @@ import {Camera, CameraResultType, CameraSource, Photo} from '@capacitor/camera'
 import { WebView } from '@capacitor/core';
 
 import {Filesystem, Directory} from '@capacitor/filesystem'
+import { Preferences } from '@capacitor/preferences';
 
 
 @Injectable({
@@ -11,7 +12,42 @@ import {Filesystem, Directory} from '@capacitor/filesystem'
 })
 export class PhotoService {
   public photos : UserPhoto[] = [];
+  private PHOTO_STORAGE: string = 'photos';
 
+  private async savePicture(photo: Photo) {
+    const base64Data = await this.readAsBase64(photo);
+    const fileName = Date.now() + '.jpeg';
+    const savedFile = await Filesystem.writeFile({ 
+    path: fileName,
+    data: base64Data,
+    directory: Directory.Data	
+    });
+ 
+// Use webPath to display the new image instead of base64 since it's
+// already loaded into memory 
+    return {
+    filepath: fileName, webviewPath: photo.webPath
+    };
+   }
+
+   private async readAsBase64(photo: Photo) {
+    // Fetch the photo, read as a blob, then convert to base64 format const response = await fetch(photo.webPath!);
+      const response = await fetch(photo.webPath!);  
+      const blob = await response.blob();
+      return await this.convertBlobToBase64(blob) as string;
+    }
+    public async loadSaved() {
+      const { value } = await Preferences.get({ key: this.PHOTO_STORAGE });
+      this.photos = (value ? JSON.parse(value) : []) as UserPhoto[];
+    }    
+    
+    private convertBlobToBase64 = (blob: Blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader(); reader.onerror = reject; reader.onload = () => {
+    resolve(reader.result);
+    };
+    reader.readAsDataURL(blob);
+    });
+    
   constructor() { }
   public async addNewToGallery(){
     // Tomar foto
@@ -20,13 +56,17 @@ export class PhotoService {
       source: CameraSource.Camera,
       quality: 100
     });
+    
+    const savedImageFile = await this.savePicture (capturedPhoto);
+    this.photos.unshift(savedImageFile);
 
-    this.photos.unshift({
-      filepath : "soot...",
-      webviewPath : capturedPhoto.webPath!
+    await Preferences.set({
+      key: this.PHOTO_STORAGE,
+      value: JSON.stringify(this.photos)
     });
 
   }
+  
 }
 export interface UserPhoto{
   filepath : string,
